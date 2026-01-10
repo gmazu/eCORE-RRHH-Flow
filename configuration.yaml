@@ -1,0 +1,117 @@
+# CONFIGURACIÓN DEL SISTEMA
+# Define zonas, mapeo de puertas, asignaciones y horarios
+
+zonas_funcionales:
+  DEPTO_A:
+    nombre: "Departamento A"
+    capacidad_planificada: 40
+    
+  DEPTO_B:
+    nombre: "Departamento B"
+    capacidad_planificada: 10
+    
+  DEPTO_C:
+    nombre: "Departamento C"
+    capacidad_planificada: 50
+    
+  DEPTO_D:
+    nombre: "Departamento D"
+    capacidad_planificada: 0  # Sin personas asignadas
+
+# Mapeo de puertas a zonas funcionales
+mapeo_puertas:
+  1:
+    zonas: ["DEPTO_A", "DEPTO_B"]
+    descripcion: "Acceso principal edificio norte"
+  
+  2:
+    zonas: ["DEPTO_C", "DEPTO_D"]
+    descripcion: "Acceso edificio sur"
+  
+  3:
+    zonas: ["DEPTO_A", "DEPTO_C"]
+    descripcion: "Acceso lateral compartido"
+
+# Asignación de tarjetas a zonas funcionales
+# Esto permite calcular la distribución definida y observada
+asignacion_tarjetas:
+  # Departamento A (40 personas)
+  DEPTO_A:
+    - "T001234"
+    - "T001235"
+    - "T001236"
+    - "T001237"
+    - "T001238"
+    # ... (agregar hasta 40 IDs reales)
+  
+  # Departamento B (10 personas)
+  DEPTO_B:
+    - "T002001"
+    - "T002002"
+    - "T002003"
+    - "T002004"
+    - "T002005"
+    # ... (agregar hasta 10 IDs reales)
+  
+  # Departamento C (50 personas)
+  DEPTO_C:
+    - "T003100"
+    - "T003101"
+    - "T003102"
+    - "T003103"
+    - "T003104"
+    # ... (agregar hasta 50 IDs reales)
+  
+  # Departamento D (0 personas planificadas)
+  DEPTO_D: []
+
+# Horarios operativos
+horarios:
+  lunes_viernes:
+    entrada: "09:00:00"
+    salida: "18:00:00"
+    colacion:
+      duracion_minutos: 60
+      inicio_ventana: "13:00:00"
+      fin_ventana: "14:00:00"
+  
+  sabado:
+    entrada: "09:00:00"
+    salida: "13:00:00"
+    colacion: null
+  
+  domingo:
+    activo: false
+
+# Reglas de recálculo
+reglas_recalculo:
+  # Umbral de desviación para considerar zona crítica
+  umbral_desviacion_critica: 0.20  # 20%
+  
+  # Umbral para zona sobredimensionada
+  umbral_sobredimension: 1.30  # 130% de lo planificado
+  
+  # Umbral para zona subatendida
+  umbral_subatencion: 0.70  # 70% de lo planificado
+  
+  # Frecuencia de recálculo en minutos
+  frecuencia_recalculo: 15
+  
+  # Prioridad de zonas para redistribución
+  prioridad_redistribucion:
+    alta: ["DEPTO_A", "DEPTO_C"]  # Zonas críticas para operación
+    media: ["DEPTO_B"]
+    baja: ["DEPTO_D"]
+
+# Colores por zona (para visualización)
+colores_zonas:
+  DEPTO_A: "#4A90E2"
+  DEPTO_B: "#50C878"
+  DEPTO_C: "#9B59B6"
+  DEPTO_D: "#E67E22"
+
+# Metadata
+metadata:
+  version: "1.0"
+  ultima_actualizacion: "2025-01-10"
+  descripcion: "Configuración base del sistema de distribución dinámica"

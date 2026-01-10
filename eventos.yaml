@@ -1,0 +1,148 @@
+# EVENTOS DE CONTROL DE ACCESO
+# Solo contiene: timestamp, id_tarjeta, puerta, tipo
+# Sin interpretación ni datos adicionales
+
+eventos:
+  # Entrada mañana - Flujo principal puerta 1
+  - timestamp: "2025-01-10T08:45:12"
+    id_tarjeta: "T001234"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T08:47:23"
+    id_tarjeta: "T001235"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T08:50:45"
+    id_tarjeta: "T002001"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T08:52:10"
+    id_tarjeta: "T002002"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T08:55:33"
+    id_tarjeta: "T003100"
+    puerta: 2
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T08:58:01"
+    id_tarjeta: "T003101"
+    puerta: 2
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T09:00:15"
+    id_tarjeta: "T003102"
+    puerta: 2
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T09:02:44"
+    id_tarjeta: "T001236"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T09:05:20"
+    id_tarjeta: "T002003"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T09:10:55"
+    id_tarjeta: "T003103"
+    puerta: 2
+    tipo: "entrada"
+  
+  # Salida colación mediodía
+  - timestamp: "2025-01-10T13:00:10"
+    id_tarjeta: "T001234"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T13:02:35"
+    id_tarjeta: "T001235"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T13:05:12"
+    id_tarjeta: "T003100"
+    puerta: 2
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T13:08:45"
+    id_tarjeta: "T002001"
+    puerta: 1
+    tipo: "salida"
+  
+  # Retorno colación
+  - timestamp: "2025-01-10T14:00:20"
+    id_tarjeta: "T001234"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T14:03:15"
+    id_tarjeta: "T001235"
+    puerta: 1
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T14:05:50"
+    id_tarjeta: "T003100"
+    puerta: 2
+    tipo: "entrada"
+  
+  - timestamp: "2025-01-10T14:10:05"
+    id_tarjeta: "T002001"
+    puerta: 1
+    tipo: "entrada"
+  
+  # Salida tarde
+  - timestamp: "2025-01-10T18:00:05"
+    id_tarjeta: "T001234"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:02:30"
+    id_tarjeta: "T001235"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:05:15"
+    id_tarjeta: "T002001"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:07:40"
+    id_tarjeta: "T002002"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:10:20"
+    id_tarjeta: "T003100"
+    puerta: 2
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:12:55"
+    id_tarjeta: "T003101"
+    puerta: 2
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:15:10"
+    id_tarjeta: "T003102"
+    puerta: 2
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:18:35"
+    id_tarjeta: "T001236"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:20:00"
+    id_tarjeta: "T002003"
+    puerta: 1
+    tipo: "salida"
+  
+  - timestamp: "2025-01-10T18:22:45"
+    id_tarjeta: "T003103"
+    puerta: 2
+    tipo: "salida"
