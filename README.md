@@ -34,7 +34,7 @@ Toda visualizacion es abstracta, funcional y honesta: solo muestra lo que puede 
 
 ## Demo
 
-- https://youtu.be/sUIP_fu_PX8
+[![Demo](https://img.youtube.com/vi/sUIP_fu_PX8/0.jpg)](https://youtu.be/sUIP_fu_PX8)
 
 ## Quick start
 
