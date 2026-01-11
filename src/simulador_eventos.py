@@ -3,6 +3,11 @@ import random
 from datetime import datetime, timedelta
 from typing import List
 import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from gestor_archivos import GestorArchivosEventos
 import logging
 

@@ -4,6 +4,9 @@ from typing import List, Dict
 import csv
 import json
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from gestor_archivos import GestorArchivosEventos
 import logging
 
