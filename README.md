@@ -9,6 +9,7 @@ Sistema de dashboards visuales para gestion operativa de personas basado en even
 ## Tabla de contenidos
 
 - [Descripcion](#descripcion)
+- [Demo](#demo)
 - [Quick start](#quick-start)
 - [Caracteristicas](#caracteristicas)
 - [Requisitos](#requisitos)
@@ -30,6 +31,10 @@ Sistema visual tipo dashboard que representa la gestion dinamica de personas a p
 - Puerta de acceso
 
 Toda visualizacion es abstracta, funcional y honesta: solo muestra lo que puede inferirse a partir de esos datos y de calculos derivados explicitos. El sistema esta orientado a optimizacion operativa y toma de decisiones, no a vigilancia ni a representacion espacial real.
+
+## Demo
+
+- https://youtu.be/sUIP_fu_PX8
 
 ## Quick start
 
