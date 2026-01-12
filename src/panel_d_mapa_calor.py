@@ -24,7 +24,7 @@ class PanelD_MapaCalorFuncional(Scene):
         # ========================================
         try:
             sistema = SistemaDistribucion(
-                path_eventos="data/eventos_procesamiento.yaml",
+                path_eventos="data",
                 path_config="config/configuracion.yaml"
             )
             

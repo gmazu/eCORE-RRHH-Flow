@@ -23,11 +23,11 @@ class PanelB_DistribucionObservada(Scene):
         # ========================================
         try:
             sistema = SistemaDistribucion(
-                path_eventos="data/eventos_procesamiento.yaml",
+                path_eventos="data",
                 path_config="config/configuracion.yaml"
             )
             
-            distribucion_observada = sistema.calcular_distribucion_observada("2025-01-10T10:00:00")
+            distribucion_observada = sistema.calcular_distribucion_observada()
             colores_zonas = sistema.config.get('colores_zonas', {})
             
         except Exception as e:

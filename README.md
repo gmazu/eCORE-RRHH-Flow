@@ -2,6 +2,8 @@
 
 Sistema de dashboards visuales para gestion operativa de personas basado en eventos minimos de control de acceso, desarrollado con Manim Community Edition.
 
+Repositorio: https://github.com/gmazu/eCORE-RRHH-Flow
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Manim](https://img.shields.io/badge/manim-community-orange.svg)
@@ -72,6 +74,38 @@ python -c "from gestor_archivos import GestorArchivosEventos; GestorArchivosEven
 manim -pql src/panel_a_definida.py PanelA_DistribucionDefinida
 manim -pql src/panel_b_observada.py PanelB_DistribucionObservada
 manim -pql src/panel_c_recalculada.py PanelC_DistribucionRecalculada
+```
+
+### Generar CSV por hora (24 archivos por dia)
+
+```bash
+# Genera data/12012026/*.csv
+python src/simulador_eventos.py 12012026
+
+# Sin parametros: genera el dia siguiente por defecto
+python src/simulador_eventos.py
+```
+
+### Cargar CSV por hora con inyector_manual.py
+
+```bash
+python src/inyector_manual.py
+# En el menu:
+# 2) Ingreso desde CSV
+# Ruta: data/12012026/0900.1000.csv
+```
+
+### Carga masiva de todos los CSV del dia
+
+```bash
+# Carga los 24 archivos horarios del dia
+for f in data/12012026/*.csv; do
+  python src/inyector_manual.py <<EOF
+2
+$f
+0
+EOF
+done
 ```
 
 ## Caracteristicas

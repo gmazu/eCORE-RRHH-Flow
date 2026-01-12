@@ -1,7 +1,9 @@
+import csv
 import yaml
 from datetime import datetime
 from typing import Dict, List, Tuple
 from collections import defaultdict
+from pathlib import Path
 
 class SistemaDistribucion:
     """
@@ -16,7 +18,7 @@ class SistemaDistribucion:
         
         # Cargar archivos
         self.config = self._cargar_yaml(path_config)
-        self.eventos = self._cargar_yaml(path_eventos)['eventos']
+        self.eventos = self._cargar_eventos(path_eventos)
         
         # Procesar datos
         self.zonas = self.config['zonas_funcionales']
@@ -28,6 +30,49 @@ class SistemaDistribucion:
         """Carga archivo YAML"""
         with open(path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
+
+    def _cargar_eventos_csv(self, path: Path) -> List[Dict]:
+        eventos = []
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if not row:
+                    continue
+                try:
+                    row["puerta"] = int(row["puerta"])
+                except (ValueError, TypeError):
+                    continue
+                eventos.append({
+                    "timestamp": row["timestamp"],
+                    "id_tarjeta": row["id_tarjeta"],
+                    "puerta": row["puerta"],
+                    "tipo": row["tipo"],
+                })
+        return eventos
+
+    def _cargar_eventos_dir(self, path: Path) -> List[Dict]:
+        eventos = []
+        for archivo in sorted(path.glob("*.csv")):
+            eventos.extend(self._cargar_eventos_csv(archivo))
+        return eventos
+
+    def _cargar_eventos(self, path: str) -> List[Dict]:
+        ruta = Path(path)
+        if ruta.is_dir():
+            hoy = datetime.now().strftime("%d%m%Y")
+            ruta_dia = ruta / hoy
+            if ruta_dia.exists():
+                return self._cargar_eventos_dir(ruta_dia)
+            return self._cargar_eventos_dir(ruta)
+
+        if ruta.suffix.lower() in {".yaml", ".yml"}:
+            datos = self._cargar_yaml(path)
+            return datos.get("eventos", [])
+
+        if ruta.suffix.lower() == ".csv":
+            return self._cargar_eventos_csv(ruta)
+
+        raise FileNotFoundError(f"No se reconoce el origen de eventos: {path}")
     
     def calcular_distribucion_definida(self) -> Dict[str, int]:
         """
@@ -195,8 +240,8 @@ class SistemaDistribucion:
 # EJEMPLO DE USO
 if __name__ == "__main__":
     sistema = SistemaDistribucion(
-        path_eventos="data/eventos_procesamiento.yaml",
-        path_config="data/configuracion.yaml"
+        path_eventos="data",
+        path_config="config/configuracion.yaml"
     )
     
     print("=== DISTRIBUCIÓN DEFINIDA ===")
