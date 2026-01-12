@@ -1,7 +1,8 @@
 import time
 import random
-from datetime import datetime, timedelta
-from typing import List
+import csv
+from datetime import datetime, timedelta, date
+from typing import List, Dict, Tuple
 import argparse
 import sys
 from pathlib import Path
@@ -218,13 +219,175 @@ class SimuladorEventos:
         logger.info(f"Simulación continua finalizada: {eventos_generados} eventos")
 
 
+def _parse_fecha_ddmmyyyy(fecha_str: str) -> date:
+    try:
+        return datetime.strptime(fecha_str, "%d%m%Y").date()
+    except ValueError as exc:
+        raise ValueError("Formato de fecha invalido, use DDMMYYYY (ej: 12012026)") from exc
+
+
+def _random_datetime(
+    rng: random.Random,
+    base_date: date,
+    start_h: int,
+    start_m: int,
+    end_h: int,
+    end_m: int,
+) -> datetime:
+    start = datetime(base_date.year, base_date.month, base_date.day, start_h, start_m, 0)
+    end = datetime(base_date.year, base_date.month, base_date.day, end_h, end_m, 59)
+    delta = int((end - start).total_seconds())
+    return start + timedelta(seconds=rng.randint(0, max(delta, 0)))
+
+
+def _split_by_hour(eventos: List[Tuple[datetime, Dict]]) -> Dict[int, List[Dict]]:
+    por_hora = {h: [] for h in range(24)}
+    for dt, evento in eventos:
+        por_hora[dt.hour].append(evento)
+    return por_hora
+
+
+def _escribir_csv_por_hora(base_dir: Path, eventos_por_hora: Dict[int, List[Dict]]) -> None:
+    base_dir.mkdir(parents=True, exist_ok=True)
+    headers = ["timestamp", "id_tarjeta", "puerta", "tipo"]
+    for hora in range(24):
+        hora_fin = (hora + 1) % 24
+        nombre = f"{hora:02d}00.{hora_fin:02d}00.csv"
+        ruta = base_dir / nombre
+        with open(ruta, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            for evento in sorted(eventos_por_hora[hora], key=lambda e: e["timestamp"]):
+                writer.writerow(evento)
+
+
+def generar_archivos_diarios(fecha_str: str, base_data: Path = Path("data")) -> Path:
+    base_date = _parse_fecha_ddmmyyyy(fecha_str)
+    rng = random.Random(int(base_date.strftime("%Y%m%d")))
+
+    empleados = [f"T{num:03d}" for num in range(1, 101)]
+    guardia = "T101"
+    cocina = "T102"
+    aseo = "T103"
+
+    max_ausentes = max(0, int(len(empleados) * 0.05))
+    ausentes = set(rng.sample(empleados, rng.randint(0, max_ausentes)))
+    presentes = [t for t in empleados if t not in ausentes]
+
+    eventos: List[Tuple[datetime, Dict]] = []
+
+    def add_evento(dt: datetime, tarjeta: str, puerta: int, tipo: str) -> None:
+        eventos.append((
+            dt,
+            {
+                "timestamp": dt.isoformat(),
+                "id_tarjeta": tarjeta,
+                "puerta": puerta,
+                "tipo": tipo,
+            },
+        ))
+
+    # Guardias y personal fuera de horario
+    add_evento(_random_datetime(rng, base_date, 0, 5, 0, 40), guardia, 1, "entrada")
+    add_evento(_random_datetime(rng, base_date, 6, 0, 6, 20), guardia, 4, "salida")
+    add_evento(_random_datetime(rng, base_date, 21, 5, 21, 25), guardia, 1, "entrada")
+    add_evento(_random_datetime(rng, base_date, 23, 0, 23, 30), guardia, 4, "salida")
+
+    add_evento(_random_datetime(rng, base_date, 7, 0, 7, 30), cocina, 1, "entrada")
+    add_evento(_random_datetime(rng, base_date, 16, 0, 16, 20), cocina, 4, "salida")
+    add_evento(_random_datetime(rng, base_date, 20, 30, 21, 0), aseo, 1, "entrada")
+    add_evento(_random_datetime(rng, base_date, 22, 0, 22, 30), aseo, 4, "salida")
+
+    # Llegadas 09:00 - 13:00
+    rng.shuffle(presentes)
+    llegada_mayoria = int(len(presentes) * rng.uniform(0.65, 0.8))
+    grupo_mayoria = presentes[:llegada_mayoria]
+    grupo_tarde = presentes[llegada_mayoria:]
+    llegada_por_tarjeta: Dict[str, datetime] = {}
+
+    for tarjeta in grupo_mayoria:
+        dt = _random_datetime(rng, base_date, 9, 0, 9, 59)
+        add_evento(dt, tarjeta, rng.choice([1, 2, 3]), "entrada")
+        llegada_por_tarjeta[tarjeta] = dt
+
+    for tarjeta in grupo_tarde:
+        hora = rng.choices([10, 11, 12], weights=[0.5, 0.3, 0.2], k=1)[0]
+        dt = _random_datetime(rng, base_date, hora, 0, hora, 55)
+        add_evento(dt, tarjeta, rng.choice([1, 2, 3]), "entrada")
+        llegada_por_tarjeta[tarjeta] = dt
+
+    # Salidas cortas entre 09 y 13
+    salida_corta = rng.sample(presentes, k=max(1, int(len(presentes) * 0.08)))
+    for tarjeta in salida_corta:
+        llegada = llegada_por_tarjeta.get(tarjeta)
+        if not llegada:
+            continue
+        inicio = llegada + timedelta(minutes=30)
+        fin = datetime(base_date.year, base_date.month, base_date.day, 12, 30, 0)
+        if inicio >= fin:
+            continue
+        dt_salida = inicio + timedelta(seconds=rng.randint(0, int((fin - inicio).total_seconds())))
+        dt_entrada = dt_salida + timedelta(minutes=rng.randint(10, 45))
+        add_evento(dt_salida, tarjeta, 4, "salida")
+        add_evento(dt_entrada, tarjeta, rng.choice([1, 2, 3]), "entrada")
+
+    # Colacion
+    casino_pct = rng.uniform(0.5, 0.8)
+    fuera_pct = rng.uniform(0.1, 0.25)
+    casino_count = int(len(presentes) * casino_pct)
+    fuera_count = int(len(presentes) * fuera_pct)
+    rng.shuffle(presentes)
+    grupo_casino = presentes[:casino_count]
+    grupo_fuera = presentes[casino_count:casino_count + fuera_count]
+
+    for tarjeta in grupo_casino:
+        dt = _random_datetime(rng, base_date, 13, 0, 13, 50)
+        add_evento(dt, tarjeta, 5, "entrada")
+
+    for tarjeta in grupo_fuera:
+        dt_salida = _random_datetime(rng, base_date, 13, 0, 13, 40)
+        add_evento(dt_salida, tarjeta, 4, "salida")
+        dt_entrada = _random_datetime(rng, base_date, 14, 0, 14, 45)
+        add_evento(dt_entrada, tarjeta, rng.choice([1, 2, 3]), "entrada")
+        if rng.random() < 0.7:
+            dt_piso = dt_entrada + timedelta(minutes=rng.randint(1, 8))
+            add_evento(dt_piso, tarjeta, 6, "entrada")
+
+    # Salida final
+    overtime_count = max(1, int(len(presentes) * rng.uniform(0.02, 0.05)))
+    overtime = set(rng.sample(presentes, k=overtime_count))
+    for tarjeta in presentes:
+        if tarjeta in overtime:
+            dt_salida = _random_datetime(rng, base_date, 19, 30, 21, 30)
+        else:
+            dt_salida = _random_datetime(rng, base_date, 18, 0, 18, 45)
+
+        if rng.random() < 0.6:
+            dt_piso = dt_salida - timedelta(minutes=rng.randint(2, 8))
+            add_evento(dt_piso, tarjeta, 7, "salida")
+        add_evento(dt_salida, tarjeta, 4, "salida")
+
+    eventos.sort(key=lambda item: item[0])
+    eventos_por_hora = _split_by_hour(eventos)
+
+    destino = base_data / base_date.strftime("%d%m%Y")
+    _escribir_csv_por_hora(destino, eventos_por_hora)
+    logger.info("Archivos diarios generados en %s", destino)
+    return destino
+
+
 # CLI
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simulador de eventos de control de acceso")
     parser.add_argument(
+        "fecha",
+        nargs="?",
+        help="Fecha DDMMYYYY para generar CSV por hora (ej: 12012026)"
+    )
+    parser.add_argument(
         '--modo',
         choices=['entrada', 'salida', 'jornada', 'continuo'],
-        default='jornada',
+        default=None,
         help='Modo de simulación'
     )
     parser.add_argument(
@@ -241,19 +404,28 @@ if __name__ == "__main__":
     )
     
     args = parser.parse_args()
-    
+
+    if args.fecha or len(sys.argv) == 1:
+        if args.fecha:
+            fecha = args.fecha
+        else:
+            fecha = (date.today() + timedelta(days=1)).strftime("%d%m%Y")
+        generar_archivos_diarios(fecha)
+        sys.exit(0)
+
     # Inicializar gestor y simulador
     gestor = GestorArchivosEventos()
     simulador = SimuladorEventos(gestor)
-    
+
     # Ejecutar según modo
-    if args.modo == 'entrada':
+    modo = args.modo or "jornada"
+    if modo == 'entrada':
         simulador.simular_horario_entrada()
-    elif args.modo == 'salida':
+    elif modo == 'salida':
         simulador.simular_horario_salida()
-    elif args.modo == 'jornada':
+    elif modo == 'jornada':
         simulador.simular_jornada_completa()
-    elif args.modo == 'continuo':
+    elif modo == 'continuo':
         simulador.simular_continuo(
             intervalo_segundos=args.intervalo,
             duracion_minutos=args.duracion
