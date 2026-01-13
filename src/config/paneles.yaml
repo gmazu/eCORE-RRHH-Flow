@@ -10,14 +10,14 @@ panel_g_flow_busy_hour:
   # === VELOCIDADES HORMIGA ===
   # Duración máxima de la ola de llegada (segundos)
   wave_duration_max: 6.0
-  # Tiempo base para entrar al lobby (segundos)
-  entrada_lobby_time: 1.2
-  # Tiempo base para subir escaleras (segundos)
-  subir_escalera_time: 0.8
-  # Tiempo base para salir (segundos)
-  salir_time: 0.9
-  # Tiempo base movimientos internos (segundos)
-  movimiento_interno_time: 0.7
+  # Velocidad entrada al lobby (mayor = más rápido, 1.0 = normal)
+  velocidad_entrada: 1.0
+  # Velocidad subir escaleras (mayor = más rápido)
+  velocidad_escalera: 1.0
+  # Velocidad salir (mayor = más rápido)
+  velocidad_salida: 1.0
+  # Velocidad movimientos internos (mayor = más rápido)
+  velocidad_interno: 1.0
 
   # === VARIACIÓN INDIVIDUAL ===
   # Rango de velocidad de cada hormiga (multiplicador)

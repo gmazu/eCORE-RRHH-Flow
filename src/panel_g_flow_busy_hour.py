@@ -35,29 +35,32 @@ class PanelG_FlowBusyHour(Scene):
         asignaciones = sistema.asignaciones
 
         # ========================================
-        # CONFIG PANEL
+        # CONFIG VELOCIDADES (desde config/configuracion.yaml)
         # ========================================
-        panel_cfg = {}
-        cfg_path = Path(__file__).parent / "config" / "paneles.yaml"
-        if cfg_path.exists():
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                panel_cfg = yaml.safe_load(f) or {}
-        panel_cfg = panel_cfg.get("panel_g_flow_busy_hour", {})
+        vel_cfg = sistema.config.get("velocidades", {})
 
-        timeline_slide_seconds = float(panel_cfg.get("timeline_slide_seconds", 0.4))
-        people_move_seconds = float(panel_cfg.get("people_move_seconds", 0.6))
+        # Timeline
+        timeline_slide_seconds = float(vel_cfg.get("timeline_slide", 0.4))
 
-        # Velocidades hormiga (configurables)
-        wave_duration_max = float(panel_cfg.get("wave_duration_max", 6.0))
-        entrada_lobby_time = float(panel_cfg.get("entrada_lobby_time", 1.2))
-        subir_escalera_time = float(panel_cfg.get("subir_escalera_time", 0.8))
-        salir_time = float(panel_cfg.get("salir_time", 0.9))
-        movimiento_interno_time = float(panel_cfg.get("movimiento_interno_time", 0.7))
-        velocidad_min = float(panel_cfg.get("velocidad_min", 0.7))
-        velocidad_max = float(panel_cfg.get("velocidad_max", 1.4))
-        micro_pausa_prob = float(panel_cfg.get("micro_pausa_prob", 0.3))
-        micro_pausa_min = float(panel_cfg.get("micro_pausa_min", 0.1))
-        micro_pausa_max = float(panel_cfg.get("micro_pausa_max", 0.4))
+        # Velocidades (mayor = más rápido)
+        velocidad_entrada = float(vel_cfg.get("entrada", 1.0))
+        velocidad_escalera = float(vel_cfg.get("escalera", 1.0))
+        velocidad_salida = float(vel_cfg.get("salida", 1.0))
+        velocidad_interno = float(vel_cfg.get("interno", 1.0))
+        wave_duration_max = float(vel_cfg.get("wave_duration_max", 6.0))
+
+        # Tiempos base (internos, no configurables)
+        base_entrada = 1.2
+        base_escalera = 0.8
+        base_salida = 0.9
+        base_interno = 0.7
+
+        # Variación individual y micro-pausas
+        velocidad_min = float(vel_cfg.get("variacion_min", 0.7))
+        velocidad_max = float(vel_cfg.get("variacion_max", 1.4))
+        micro_pausa_prob = float(vel_cfg.get("micro_pausa_prob", 0.3))
+        micro_pausa_min = float(vel_cfg.get("micro_pausa_min", 0.1))
+        micro_pausa_max = float(vel_cfg.get("micro_pausa_max", 0.4))
 
         # ========================================
         # TITULO
@@ -388,68 +391,81 @@ class PanelG_FlowBusyHour(Scene):
             saliendo = [(t, a, o) for t, a, o in movimientos if a != "fuera" and o == "fuera"]
             internos = [(t, a, o) for t, a, o in movimientos if t not in {m[0] for m in entrando + saliendo}]
 
-            wave_in = []
-            # Ola gaussiana - duración configurable
-            wave_duration = min(wave_duration_max, max(1.5, 1.0 + 0.12 * len(entrando)))
-            delays = gaussian_delays(len(entrando), wave_duration, seed=f"wave:{hora}")
+            # Agrupar entrantes por departamento (campana gaussiana independiente por color)
+            entrando_por_depto = {}
+            for t, a, o in entrando:
+                depto = depto_por_id.get(t, "OTROS")
+                if depto not in entrando_por_depto:
+                    entrando_por_depto[depto] = []
+                entrando_por_depto[depto].append((t, a, o))
 
-            for (tarjeta, actual, objetivo), delay in zip(entrando, delays):
-                destino_lobby = pos_random(tarjeta, "lobby")
-                # Cada hormiga tiene su velocidad
-                vel = velocidad_hormiga(f"{tarjeta}:{hora}")
-                run_time = entrada_lobby_time * vel
+            # Orden cromático: azul (DEPTO_A) → verde (DEPTO_B) → morado (DEPTO_C) → otros
+            orden_colores = ["DEPTO_A", "DEPTO_B", "DEPTO_C", "OTROS"]
 
-                # Micro-pausa como si se cruzara con alguien
-                pausa = micro_pausa(f"{tarjeta}:{hora}:pausa")
+            # Duración base de ola (para salidas/internos si no hay entradas)
+            wave_duration = wave_duration_max
 
-                anim = mover_lineal(dots[tarjeta], destino_lobby, run_time=run_time)
-                if anim:
-                    if pausa > 0:
-                        wave_in.append(Succession(Wait(delay), anim, Wait(pausa)))
-                    else:
-                        wave_in.append(Succession(Wait(delay), anim))
-
-            if wave_in:
-                self.play(
-                    AnimationGroup(*wave_in, lag_ratio=0.0)
-                )
-                for tarjeta, _, _ in entrando:
-                    zona_actual[tarjeta] = "lobby"
-
-            wave_up = []
-            for tarjeta, actual, objetivo in entrando:
-                if objetivo == "lobby":
-                    zona_actual[tarjeta] = objetivo
+            # Animar cada grupo en orden cromático (secuencial)
+            # Primero entran al lobby, luego suben - todo por color
+            for depto in orden_colores:
+                if depto not in entrando_por_depto:
                     continue
-                destino = pos_random(tarjeta, objetivo)
-                vel = velocidad_hormiga(f"{tarjeta}:{hora}:up")
-                run_time = subir_escalera_time * vel
-                anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
-                if anim:
-                    wave_up.append(anim)
-                zona_actual[tarjeta] = objetivo
+                grupo = entrando_por_depto[depto]
+                if not grupo:
+                    continue
 
+                # FASE 1: Entrar al lobby (campana gaussiana)
+                wave_in = []
+                wave_duration = min(wave_duration_max, max(1.5, 1.0 + 0.12 * len(grupo)))
+                delays = gaussian_delays(len(grupo), wave_duration, seed=f"wave:{hora}:{depto}")
+
+                for (tarjeta, actual, objetivo), delay in zip(grupo, delays):
+                    destino_lobby = pos_random(tarjeta, "lobby")
+                    vel_individual = velocidad_hormiga(f"{tarjeta}:{hora}")
+                    run_time = (base_entrada / velocidad_entrada) * vel_individual
+                    pausa = micro_pausa(f"{tarjeta}:{hora}:pausa")
+
+                    anim = mover_lineal(dots[tarjeta], destino_lobby, run_time=run_time)
+                    if anim:
+                        if pausa > 0:
+                            wave_in.append(Succession(Wait(delay), anim, Wait(pausa)))
+                        else:
+                            wave_in.append(Succession(Wait(delay), anim))
+
+                if wave_in:
+                    self.play(AnimationGroup(*wave_in, lag_ratio=0.0))
+                    for tarjeta, _, _ in grupo:
+                        zona_actual[tarjeta] = "lobby"
+
+                # FASE 2: Subir a su piso (mismo grupo de color)
+                wave_up = []
+                up_delays = gaussian_delays(len(grupo), wave_duration * 0.6, seed=f"up:{hora}:{depto}")
+                for (tarjeta, actual, objetivo), delay in zip(grupo, up_delays):
+                    if objetivo == "lobby":
+                        zona_actual[tarjeta] = objetivo
+                        continue
+                    destino = pos_random(tarjeta, objetivo)
+                    vel_individual = velocidad_hormiga(f"{tarjeta}:{hora}:up")
+                    run_time = (base_escalera / velocidad_escalera) * vel_individual
+                    anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
+                    if anim:
+                        wave_up.append(Succession(Wait(delay), anim))
+                    zona_actual[tarjeta] = objetivo
+
+                if wave_up:
+                    self.play(AnimationGroup(*wave_up, lag_ratio=0.0))
+
+            # Actualizar hora en timeline
             hora_label = Text(f"{hora:02d}:00", font_size=16, color=WHITE)
             hora_label.move_to(hora_text.get_center())
-
-            if wave_up:
-                self.play(
-                    LaggedStart(*wave_up, lag_ratio=0.03),
-                    Transform(hora_text, hora_label),
-                    run_time=people_move_seconds
-                )
-            else:
-                self.play(
-                    Transform(hora_text, hora_label),
-                    run_time=0.3
-                )
+            self.play(Transform(hora_text, hora_label), run_time=0.3)
 
             wave_out = []
             out_delays = gaussian_delays(len(saliendo), wave_duration * 0.7, seed=f"out:{hora}")
             for (tarjeta, actual, objetivo), delay in zip(saliendo, out_delays):
                 destino = pos_random(tarjeta, objetivo)
-                vel = velocidad_hormiga(f"{tarjeta}:{hora}:out")
-                run_time = salir_time * vel
+                vel_individual = velocidad_hormiga(f"{tarjeta}:{hora}:out")
+                run_time = (base_salida / velocidad_salida) * vel_individual
                 pausa = micro_pausa(f"{tarjeta}:{hora}:out:pausa")
                 anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
                 if anim:
@@ -468,8 +484,8 @@ class PanelG_FlowBusyHour(Scene):
             int_delays = gaussian_delays(len(internos), wave_duration * 0.5, seed=f"int:{hora}")
             for (tarjeta, actual, objetivo), delay in zip(internos, int_delays):
                 destino = pos_random(tarjeta, objetivo)
-                vel = velocidad_hormiga(f"{tarjeta}:{hora}:int")
-                run_time = movimiento_interno_time * vel
+                vel_individual = velocidad_hormiga(f"{tarjeta}:{hora}:int")
+                run_time = (base_interno / velocidad_interno) * vel_individual
                 anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
                 if anim:
                     wave_internal.append(Succession(Wait(delay), anim))

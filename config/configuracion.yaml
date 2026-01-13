@@ -208,6 +208,24 @@ colores_zonas:
   DEPTO_C: "#9B59B6"
   DEPTO_D: "#E67E22"
 
+# Velocidades de animación (Panel G)
+# Mayor = más rápido, 1.0 = normal, 0.5 = mitad de velocidad
+velocidades:
+  timeline_slide: 0.4
+  entrada: 1.0
+  escalera: 1.0
+  salida: 1.0
+  interno: 1.0
+  # Duración máxima de la ola de llegada (segundos)
+  wave_duration_max: 6.0
+  # Variación individual de cada persona
+  variacion_min: 0.7
+  variacion_max: 1.4
+  # Micro-pausas (conversaciones)
+  micro_pausa_prob: 0.3
+  micro_pausa_min: 0.1
+  micro_pausa_max: 0.4
+
 # Metadata
 metadata:
   version: "1.0"
