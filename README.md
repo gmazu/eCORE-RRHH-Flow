@@ -263,6 +263,7 @@ Formatos soportados:
 - Panel D: `src/panel_d_mapa_calor.py` (Mapa de Calor)
 - Panel E: `src/panel_e_temporal.py` (Evolucion Temporal)
 - Panel F: `src/panel_f_contexto.py` (Contexto y Decisiones)
+- Panel G: `src/panel_g_flow_busy_hour.py` (Flow Busy Hour)
 
 ## Uso
 
@@ -272,6 +273,7 @@ Formatos soportados:
 manim -pql src/panelA.py PanelA_DistribucionDefinida
 manim -pql src/panel_b_observada.py PanelB_DistribucionObservada
 manim -pql src/panel_c_recalculada.py PanelC_DistribucionRecalculada
+R2H2_FECHA=12012026 manim -pql src/panel_g_flow_busy_hour.py PanelG_FlowBusyHour
 ```
 
 ### Flujo recomendado

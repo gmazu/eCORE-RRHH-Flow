@@ -1,0 +1,8 @@
+# Configuracion general de paneles
+
+panel_g_flow_busy_hour:
+  elevator_capacity: 6
+  elevator_trip_limit: 3
+  patience_trips: 3
+  timeline_slide_seconds: 0.4
+  people_move_seconds: 0.6

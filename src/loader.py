@@ -1,4 +1,6 @@
 import csv
+import logging
+import re
 import yaml
 from datetime import datetime
 from typing import Dict, List, Tuple
@@ -15,6 +17,7 @@ class SistemaDistribucion:
     def __init__(self, path_eventos: str, path_config: str):
         self.path_eventos = path_eventos
         self.path_config = path_config
+        self.logger = logging.getLogger(__name__)
         
         # Cargar archivos
         self.config = self._cargar_yaml(path_config)
@@ -52,12 +55,16 @@ class SistemaDistribucion:
 
     def _cargar_eventos_dir(self, path: Path) -> List[Dict]:
         eventos = []
-        for archivo in sorted(path.glob("*.csv")):
+        archivos = sorted(path.glob("*.csv"))
+        self._alertar_horas_faltantes(path, archivos)
+        for archivo in archivos:
             eventos.extend(self._cargar_eventos_csv(archivo))
         return eventos
 
     def _cargar_eventos(self, path: str) -> List[Dict]:
         ruta = Path(path)
+        if not ruta.exists():
+            raise FileNotFoundError(f"No existe ruta de eventos: {path}")
         if ruta.is_dir():
             hoy = datetime.now().strftime("%d%m%Y")
             ruta_dia = ruta / hoy
@@ -73,6 +80,54 @@ class SistemaDistribucion:
             return self._cargar_eventos_csv(ruta)
 
         raise FileNotFoundError(f"No se reconoce el origen de eventos: {path}")
+
+    def _alertar_horas_faltantes(self, path: Path, archivos: List[Path]) -> None:
+        fecha_dir = path.name
+        hoy = datetime.now().strftime("%d%m%Y")
+        if fecha_dir != hoy:
+            return
+
+        patron = re.compile(r"^(?P<h_ini>\d{2})00\.(?P<h_fin>\d{2})00\.csv$")
+        horas_presentes = set()
+        nombres_invalidos = []
+        horas_futuras = []
+        for archivo in archivos:
+            match = patron.match(archivo.name)
+            if not match:
+                nombres_invalidos.append(archivo.name)
+                continue
+            h_ini = int(match.group("h_ini"))
+            h_fin = int(match.group("h_fin"))
+            if (h_ini + 1) % 24 != h_fin:
+                nombres_invalidos.append(archivo.name)
+                continue
+            horas_presentes.add(h_ini)
+            if h_ini >= datetime.now().hour:
+                horas_futuras.append(archivo.name)
+
+        hora_actual = datetime.now().hour
+        faltantes = [h for h in range(hora_actual) if h not in horas_presentes]
+        if faltantes:
+            faltantes_txt = ", ".join(f"{h:02d}00.{(h + 1) % 24:02d}00.csv" for h in faltantes)
+            self.logger.warning(
+                "Faltan archivos horarios del dia %s: %s",
+                fecha_dir,
+                faltantes_txt
+            )
+        if nombres_invalidos:
+            invalidos_txt = ", ".join(sorted(nombres_invalidos))
+            self.logger.warning(
+                "Archivos CSV con nombre invalido en %s: %s",
+                fecha_dir,
+                invalidos_txt
+            )
+        if horas_futuras:
+            futuras_txt = ", ".join(sorted(horas_futuras))
+            self.logger.warning(
+                "Archivos horarios futuros detectados en %s: %s",
+                fecha_dir,
+                futuras_txt
+            )
     
     def calcular_distribucion_definida(self) -> Dict[str, int]:
         """
