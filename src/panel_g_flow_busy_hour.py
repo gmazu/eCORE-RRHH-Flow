@@ -5,7 +5,6 @@ from pathlib import Path
 from datetime import datetime
 import random
 import numpy as np
-from collections import defaultdict
 import yaml
 
 # Agregar src/ al path
@@ -45,11 +44,20 @@ class PanelG_FlowBusyHour(Scene):
                 panel_cfg = yaml.safe_load(f) or {}
         panel_cfg = panel_cfg.get("panel_g_flow_busy_hour", {})
 
-        elevator_capacity = int(panel_cfg.get("elevator_capacity", 6))
-        elevator_trip_limit = int(panel_cfg.get("elevator_trip_limit", 3))
-        patience_trips = int(panel_cfg.get("patience_trips", elevator_trip_limit))
         timeline_slide_seconds = float(panel_cfg.get("timeline_slide_seconds", 0.4))
         people_move_seconds = float(panel_cfg.get("people_move_seconds", 0.6))
+
+        # Velocidades hormiga (configurables)
+        wave_duration_max = float(panel_cfg.get("wave_duration_max", 6.0))
+        entrada_lobby_time = float(panel_cfg.get("entrada_lobby_time", 1.2))
+        subir_escalera_time = float(panel_cfg.get("subir_escalera_time", 0.8))
+        salir_time = float(panel_cfg.get("salir_time", 0.9))
+        movimiento_interno_time = float(panel_cfg.get("movimiento_interno_time", 0.7))
+        velocidad_min = float(panel_cfg.get("velocidad_min", 0.7))
+        velocidad_max = float(panel_cfg.get("velocidad_max", 1.4))
+        micro_pausa_prob = float(panel_cfg.get("micro_pausa_prob", 0.3))
+        micro_pausa_min = float(panel_cfg.get("micro_pausa_min", 0.1))
+        micro_pausa_max = float(panel_cfg.get("micro_pausa_max", 0.4))
 
         # ========================================
         # TITULO
@@ -90,6 +98,7 @@ class PanelG_FlowBusyHour(Scene):
             building_bottom + floor_height * 2.5,
             building_bottom + floor_height * 3.5,
         ]
+        floor_surface_y = [y - floor_height / 2 + 0.08 for y in floor_centers]
 
         building = Rectangle(
             width=building_width,
@@ -173,22 +182,35 @@ class PanelG_FlowBusyHour(Scene):
         # ZONAS Y POSICIONES
         # ========================================
         zonas = {
-            "fuera": (-6.5, -3.5, -1.6, 1.6),
-            "lobby": (building_center_x - 2.8, building_center_x + 2.8, floor_centers[0] - 0.35, floor_centers[0] + 0.35),
-            "depto_a": (building_center_x - 2.8, building_center_x + 2.8, floor_centers[1] - 0.35, floor_centers[1] + 0.35),
-            "depto_b": (building_center_x - 2.8, building_center_x - 0.2, floor_centers[2] - 0.35, floor_centers[2] + 0.35),
-            "depto_c": (building_center_x + 0.2, building_center_x + 2.8, floor_centers[2] - 0.35, floor_centers[2] + 0.35),
-            "casino": (building_center_x - 2.8, building_center_x + 2.8, floor_centers[3] - 0.35, floor_centers[3] + 0.35),
+            "fuera": (-9.0, -7.2),
+            "lobby": (building_center_x - 2.8, building_center_x + 2.8),
+            "depto_a": (building_center_x - 2.8, building_center_x + 2.8),
+            "depto_b": (building_center_x - 2.8, building_center_x - 0.2),
+            "depto_c": (building_center_x + 0.2, building_center_x + 2.8),
+            "casino": (building_center_x - 2.8, building_center_x + 2.8),
         }
 
-        elevator_lobby = [elevator_x, floor_centers[0], 0]
-        stairs_lobby = [stairs_x, floor_centers[0], 0]
+        zone_y = {
+            "fuera": floor_surface_y[0],
+            "lobby": floor_surface_y[0],
+            "depto_a": floor_surface_y[1],
+            "depto_b": floor_surface_y[2],
+            "depto_c": floor_surface_y[2],
+            "casino": floor_surface_y[3],
+        }
 
-        # Contadores IN/OUT
-        total_in = 0
-        total_out = 0
-        contador_in = Text("IN eventos: 0", font_size=20, color="#50C878")
-        contador_out = Text("OUT eventos: 0", font_size=20, color="#E74C3C")
+        piso_extendido = Line(
+            np.array([-7.6, floor_surface_y[0], 0]),
+            np.array([building_center_x + building_width / 2, floor_surface_y[0], 0]),
+            color=GRAY,
+            stroke_width=2
+        )
+        self.play(Create(piso_extendido))
+
+        # Contadores de ocupación actual
+        ocupacion_dentro = 0
+        contador_in = Text("Dentro: 0", font_size=20, color="#50C878")
+        contador_out = Text("Fuera: 100", font_size=20, color="#E74C3C")
         total_text = Text(f"Personas: {total_personas}", font_size=18, color=WHITE)
         asistencia_text = Text(f"Asistencia: {asistencia_pct:.1f}%", font_size=18, color=WHITE)
         contador_in.to_corner(UR, buff=0.6)
@@ -198,10 +220,10 @@ class PanelG_FlowBusyHour(Scene):
         self.play(FadeIn(contador_in), FadeIn(contador_out), FadeIn(total_text), FadeIn(asistencia_text))
 
         def pos_random(tarjeta: str, zona: str) -> list:
-            xmin, xmax, ymin, ymax = zonas[zona]
+            xmin, xmax = zonas[zona]
             seed = f"{tarjeta}:{zona}"
             rng = random.Random(seed)
-            return [rng.uniform(xmin, xmax), rng.uniform(ymin, ymax), 0]
+            return [rng.uniform(xmin, xmax), zone_y[zona], 0]
 
         # ========================================
         # CREAR PERSONAS
@@ -266,63 +288,47 @@ class PanelG_FlowBusyHour(Scene):
         estado = {tarjeta: "fuera" for tarjeta in ids_totales}
         zona_actual = {tarjeta: "fuera" for tarjeta in ids_totales}
 
-        zone_floor = {
-            "fuera": -1,
-            "lobby": 0,
-            "depto_a": 1,
-            "depto_b": 2,
-            "depto_c": 2,
-            "casino": 3,
-        }
-
-        elevator_floor = 0
-        elevator_capacity = max(1, elevator_capacity)
-        elevator_trip_limit = max(1, elevator_trip_limit)
-        patience_trips = max(1, patience_trips)
-        def animar_puertas(abre: bool):
-            cab_center = elevator_cab.get_center()
-            door_left_closed = cab_center + LEFT * (cab_width * 0.15)
-            door_right_closed = cab_center + RIGHT * (cab_width * 0.15)
-            door_left_open = cab_center + LEFT * (cab_width * 0.33)
-            door_right_open = cab_center + RIGHT * (cab_width * 0.33)
-            if abre:
-                return AnimationGroup(
-                    door_left.animate.move_to(door_left_open),
-                    door_right.animate.move_to(door_right_open),
-                    lag_ratio=0
-                )
-            return AnimationGroup(
-                door_left.animate.move_to(door_left_closed),
-                door_right.animate.move_to(door_right_closed),
-                lag_ratio=0
-            )
-
-        def mover_elevador(hacia_floor: int):
-            nonlocal elevator_floor
-            destino_y = floor_centers[hacia_floor]
-            anim = elevator.animate.move_to([elevator_x, destino_y, 0])
-            elevator_floor = hacia_floor
-            return anim
-
         def mover_por_escalera(dot, destino, run_time=0.3):
             start = dot.get_center()
             if np.allclose(start, destino):
                 return None
-            p1 = np.array([stairs_x, floor_centers[0], 0])
+            p1 = np.array([stairs_x, floor_surface_y[0], 0])
             p2 = np.array([stairs_x, destino[1], 0])
             path = VMobject()
             path.set_points_as_corners([start, p1, p2, destino])
-            return MoveAlongPath(dot, path, rate_func=linear, run_time=run_time)
+            # smooth para movimiento orgánico (acelera y desacelera)
+            return MoveAlongPath(dot, path, rate_func=smooth, run_time=run_time)
 
-        def mover_por_elevador(dot, destino, run_time=0.3):
+        def mover_lineal(dot, destino, run_time=0.3):
             start = dot.get_center()
             if np.allclose(start, destino):
                 return None
-            p1 = np.array([elevator_x, floor_centers[0], 0])
-            p2 = np.array([elevator_x, destino[1], 0])
-            path = VMobject()
-            path.set_points_as_corners([start, p1, p2, destino])
-            return MoveAlongPath(dot, path, rate_func=linear, run_time=run_time)
+            path = Line(start, destino)
+            # smooth para que no se vea robótico
+            return MoveAlongPath(dot, path, rate_func=smooth, run_time=run_time)
+
+        def gaussian_delays(count: int, total_duration: float, seed: str) -> list:
+            """Genera delays gaussianos para simular llegada tipo 'ola de hormigas'."""
+            if count <= 1:
+                return [0.0] * count
+            rng = random.Random(seed)
+            # Distribución gaussiana más pronunciada para efecto de ola
+            samples = [rng.gauss(0.5, 0.25) for _ in range(count)]
+            # Clamp entre 0 y 1
+            samples = [max(0.0, min(1.0, s)) for s in samples]
+            return [s * total_duration for s in samples]
+
+        def velocidad_hormiga(seed: str) -> float:
+            """Cada hormiga tiene su propia velocidad - algunas rápidas, otras lentas."""
+            rng = random.Random(seed)
+            return rng.uniform(velocidad_min, velocidad_max)
+
+        def micro_pausa(seed: str) -> float:
+            """Micro-pausas aleatorias como si conversaran o se cruzaran."""
+            rng = random.Random(seed)
+            if rng.random() < micro_pausa_prob:
+                return rng.uniform(micro_pausa_min, micro_pausa_max)
+            return 0.0
 
         def aplicar_evento(evento: dict) -> None:
             tarjeta = evento["id_tarjeta"]
@@ -364,57 +370,71 @@ class PanelG_FlowBusyHour(Scene):
         prev_marker_pos = marcador.get_center().copy()
         for hora in range(24):
             eventos_hora = sorted(eventos_por_hora[hora], key=lambda x: x[0])
-            total_in += sum(1 for _, e in eventos_hora if e.get("tipo") == "entrada")
-            total_out += sum(1 for _, e in eventos_hora if e.get("tipo") == "salida")
             for _, evento in eventos_hora:
                 aplicar_evento(evento)
 
-            animaciones = []
+            # Contar ocupación actual (personas dentro del edificio)
+            ocupacion_dentro = sum(1 for t in ids_totales if estado[t] != "fuera")
+            ocupacion_fuera = total_personas - ocupacion_dentro
+
             movimientos = []
             for tarjeta, dot in dots.items():
                 actual = zona_actual[tarjeta]
                 objetivo = estado[tarjeta]
                 if actual != objetivo:
                     movimientos.append((tarjeta, actual, objetivo))
+            movimientos.sort(key=lambda item: dots[item[0]].get_center()[0])
+            entrando = [(t, a, o) for t, a, o in movimientos if a == "fuera" and o != "fuera"]
+            saliendo = [(t, a, o) for t, a, o in movimientos if a != "fuera" and o == "fuera"]
+            internos = [(t, a, o) for t, a, o in movimientos if t not in {m[0] for m in entrando + saliendo}]
 
-            # Seleccion para elevator vs escaleras
-            elegibles = []
-            for tarjeta, actual, objetivo in movimientos:
-                if zone_floor.get(actual, -1) >= 0 or zone_floor.get(objetivo, -1) >= 0:
-                    elegibles.append((tarjeta, actual, objetivo))
+            wave_in = []
+            # Ola gaussiana - duración configurable
+            wave_duration = min(wave_duration_max, max(1.5, 1.0 + 0.12 * len(entrando)))
+            delays = gaussian_delays(len(entrando), wave_duration, seed=f"wave:{hora}")
 
-            elegibles.sort(key=lambda x: x[0])
-            elevator_candidatos = elegibles[:elevator_capacity * patience_trips]
-            elevator_set = {t[0] for t in elevator_candidatos}
+            for (tarjeta, actual, objetivo), delay in zip(entrando, delays):
+                destino_lobby = pos_random(tarjeta, "lobby")
+                # Cada hormiga tiene su velocidad
+                vel = velocidad_hormiga(f"{tarjeta}:{hora}")
+                run_time = entrada_lobby_time * vel
 
-            # Si hay mas pisos que viajes, el resto usa escaleras
-            targets_by_floor = defaultdict(list)
-            for tarjeta, actual, objetivo in elevator_candidatos:
-                floor = max(zone_floor.get(objetivo, 0), 0)
-                targets_by_floor[floor].append((tarjeta, actual, objetivo))
+                # Micro-pausa como si se cruzara con alguien
+                pausa = micro_pausa(f"{tarjeta}:{hora}:pausa")
 
-            if len(targets_by_floor.keys()) > elevator_trip_limit:
-                floors_sorted = sorted(targets_by_floor.items(), key=lambda item: len(item[1]), reverse=True)
-                allowed = {f for f, _ in floors_sorted[:elevator_trip_limit]}
-                for floor, items in list(targets_by_floor.items()):
-                    if floor not in allowed:
-                        for tarjeta, actual, objetivo in items:
-                            elevator_set.discard(tarjeta)
-                        del targets_by_floor[floor]
-
-            for tarjeta, actual, objetivo in movimientos:
-                if tarjeta in elevator_set:
-                    continue
-                anim = mover_por_escalera(dots[tarjeta], stairs_lobby, run_time=0.2)
+                anim = mover_lineal(dots[tarjeta], destino_lobby, run_time=run_time)
                 if anim:
-                    animaciones.append(anim)
+                    if pausa > 0:
+                        wave_in.append(Succession(Wait(delay), anim, Wait(pausa)))
+                    else:
+                        wave_in.append(Succession(Wait(delay), anim))
+
+            if wave_in:
+                self.play(
+                    AnimationGroup(*wave_in, lag_ratio=0.0)
+                )
+                for tarjeta, _, _ in entrando:
+                    zona_actual[tarjeta] = "lobby"
+
+            wave_up = []
+            for tarjeta, actual, objetivo in entrando:
+                if objetivo == "lobby":
+                    zona_actual[tarjeta] = objetivo
+                    continue
+                destino = pos_random(tarjeta, objetivo)
+                vel = velocidad_hormiga(f"{tarjeta}:{hora}:up")
+                run_time = subir_escalera_time * vel
+                anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
+                if anim:
+                    wave_up.append(anim)
+                zona_actual[tarjeta] = objetivo
 
             hora_label = Text(f"{hora:02d}:00", font_size=16, color=WHITE)
             hora_label.move_to(hora_text.get_center())
 
-            if animaciones:
+            if wave_up:
                 self.play(
-                    AnimationGroup(*animaciones, lag_ratio=0.01),
+                    LaggedStart(*wave_up, lag_ratio=0.03),
                     Transform(hora_text, hora_label),
                     run_time=people_move_seconds
                 )
@@ -424,55 +444,41 @@ class PanelG_FlowBusyHour(Scene):
                     run_time=0.3
                 )
 
-            # Elevador: max 3 viajes por hora
-            viajes = 0
-            # Elevador: mover a lobby primero
-            for tarjeta, actual, objetivo in elevator_candidatos:
-                if tarjeta in elevator_set:
-                    anim = mover_por_elevador(dots[tarjeta], elevator_lobby, run_time=0.2)
-                    if anim:
-                        self.play(anim)
-
-            for floor in sorted(targets_by_floor.keys()):
-                if viajes >= elevator_trip_limit:
-                    break
-                grupo = targets_by_floor[floor][:elevator_capacity]
-                overflow = targets_by_floor[floor][elevator_capacity:]
-                for tarjeta, actual, objetivo in overflow:
-                    anim = mover_por_escalera(dots[tarjeta], stairs_lobby, run_time=0.2)
-                    if anim:
-                        self.play(anim)
-                    destino = pos_random(tarjeta, objetivo)
-                    anim = mover_por_escalera(dots[tarjeta], destino, run_time=0.3)
-                    if anim:
-                        self.play(anim)
-                    zona_actual[tarjeta] = objetivo
-                if not grupo:
-                    continue
-
-                anims = []
-                for tarjeta, actual, objetivo in grupo:
-                    destino = pos_random(tarjeta, objetivo)
-                    anim = mover_por_elevador(dots[tarjeta], destino, run_time=0.3)
-                    if anim:
-                        anims.append(anim)
-                    zona_actual[tarjeta] = objetivo
-
-                self.play(mover_elevador(floor), run_time=0.3)
-                self.play(animar_puertas(True), run_time=0.15)
-                if anims:
-                    self.play(AnimationGroup(*anims, lag_ratio=0.02), run_time=0.4)
-                self.play(animar_puertas(False), run_time=0.15)
-                viajes += 1
-
-            for tarjeta, actual, objetivo in movimientos:
-                if tarjeta in elevator_set:
-                    continue
+            wave_out = []
+            out_delays = gaussian_delays(len(saliendo), wave_duration * 0.7, seed=f"out:{hora}")
+            for (tarjeta, actual, objetivo), delay in zip(saliendo, out_delays):
                 destino = pos_random(tarjeta, objetivo)
-                anim = mover_por_escalera(dots[tarjeta], destino, run_time=0.3)
+                vel = velocidad_hormiga(f"{tarjeta}:{hora}:out")
+                run_time = salir_time * vel
+                pausa = micro_pausa(f"{tarjeta}:{hora}:out:pausa")
+                anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
                 if anim:
-                    self.play(anim)
+                    if pausa > 0:
+                        wave_out.append(Succession(Wait(delay), anim, Wait(pausa)))
+                    else:
+                        wave_out.append(Succession(Wait(delay), anim))
                 zona_actual[tarjeta] = objetivo
+
+            if wave_out:
+                self.play(
+                    AnimationGroup(*wave_out, lag_ratio=0.0)
+                )
+
+            wave_internal = []
+            int_delays = gaussian_delays(len(internos), wave_duration * 0.5, seed=f"int:{hora}")
+            for (tarjeta, actual, objetivo), delay in zip(internos, int_delays):
+                destino = pos_random(tarjeta, objetivo)
+                vel = velocidad_hormiga(f"{tarjeta}:{hora}:int")
+                run_time = movimiento_interno_time * vel
+                anim = mover_por_escalera(dots[tarjeta], destino, run_time=run_time)
+                if anim:
+                    wave_internal.append(Succession(Wait(delay), anim))
+                zona_actual[tarjeta] = objetivo
+
+            if wave_internal:
+                self.play(
+                    AnimationGroup(*wave_internal, lag_ratio=0.0)
+                )
 
             marcador_destino = puntos[hora].get_center()
             if not np.allclose(prev_marker_pos, marcador_destino):
@@ -483,8 +489,8 @@ class PanelG_FlowBusyHour(Scene):
                 )
                 prev_marker_pos = marcador_destino
 
-            nuevo_in = Text(f"IN eventos: {total_in}", font_size=20, color="#50C878").move_to(contador_in.get_center())
-            nuevo_out = Text(f"OUT eventos: {total_out}", font_size=20, color="#E74C3C").move_to(contador_out.get_center())
+            nuevo_in = Text(f"Dentro: {ocupacion_dentro}", font_size=20, color="#50C878").move_to(contador_in.get_center())
+            nuevo_out = Text(f"Fuera: {ocupacion_fuera}", font_size=20, color="#E74C3C").move_to(contador_out.get_center())
             self.play(Transform(contador_in, nuevo_in), Transform(contador_out, nuevo_out), run_time=0.2)
 
         self.wait(2)
